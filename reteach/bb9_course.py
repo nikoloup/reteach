@@ -17,8 +17,9 @@ from lxml import etree
 import utils
 
 class Course(object):
-    def __init__(self, archive_filename):
+    def __init__(self, archive_filename, course_id):
         self.archive_filename = archive_filename
+	self.course_id = course_id
 
         self.timestamp = str(time.time()).split('.')[0]
 
@@ -69,13 +70,13 @@ class Course(object):
     def convert_resources(self):
         for resource in self.manifest.iterfind('.//resource'):
             dat_name = resource.attrib['file']
-
+	    
             # TODO: Replace with a check in self.zip.namelist?
             try:
                 xml = etree.parse(self.zip.open(dat_name))
             except KeyError:
                 continue
-
+	    
             res_num = dat_name.replace('res', '').replace('.dat', '')
 
             res_type = resource.attrib['type']
@@ -89,16 +90,19 @@ class Course(object):
             elif res_type == 'resource/x-bb-staffinfo':
                 self.resources.append(StaffInfo(xml, res_num))
             elif res_type == 'assessment/x-bb-qti-test':
-                quiz_questions = self.convert_questions(xml, res_num)
+               	quiz_questions = self.convert_questions(xml, res_num)
                 self.quizzes.append(Test(xml, quiz_questions, res_num))
             elif res_type == 'assessment/x-bb-qti-survey':
-                quiz_questions = self.convert_questions(xml, res_num)
+    		quiz_questions = self.convert_questions(xml, res_num)
                 self.quizzes.append(Survey(xml, quiz_questions, res_num))
             elif res_type == 'assessment/x-bb-qti-pool':
                 quiz_questions = self.convert_questions(xml, res_num)
                 self.quizzes.append(Pool(xml, quiz_questions, res_num))
             elif res_type == 'resource/x-bb-document':
-                document = Document(xml, res_num)
+		#nikoloup
+		#Pass zipfile as parameter
+                document = Document(xml, res_num, self.zip)
+		#end
 
                 if not document.ignore:
                     self.resources.append(document)
@@ -121,6 +125,28 @@ class Course(object):
             self.secondary_category = ''
 
     def convert_questions(self, xml, res_num):
+	#nikoloup
+	#Replace filenames with correct
+	xmlstr = etree.tostring(xml)
+
+	regex = re.compile('\"(@X@EmbeddedFile[^/]*(/xid[^"]*))\"')
+
+	for match in regex.finditer(xmlstr):
+		xid = match.group(2)
+		for filename in self.zip.namelist():
+                        if filename.find(xid[1:])!=-1 and filename.find('.xml')==-1:
+                                moodle_fname = filename
+                                break
+
+		parts = moodle_fname.split('/')
+                moodle_fname = parts[len(parts)-1]
+                parts1 = moodle_fname.split('__')
+                parts2 = moodle_fname.split('.')
+                moodle_fname = '../../file.php/' + self.course_id + '/' + parts1[0] + '.' + parts2[len(parts2)-1]
+		xmlstr = xmlstr.replace(match.group(0),moodle_fname)
+
+	xml = etree.fromstring(xmlstr)
+	
         questions = xml.findall('.//item')
 
         old_question_ids = [q.id for q in sum(self.questions.values(), [])]
@@ -129,7 +155,7 @@ class Course(object):
 
         for question in questions:
             question_type = question.find('.//bbmd_questiontype').text
-
+	    
             if question_type == 'Essay':
                 self.questions['essay'].append(EssayQuestion(question, res_num))
             elif question_type == 'Short Response':
@@ -347,17 +373,24 @@ class StaffInfo(Resource):
 
 
 class Document(Resource):
+    #nikoloup
+    #Extending Document to receive zipfile
+    def __init__(self, xml, res_num, zipfile):
+	self.zipfile = zipfile
+	Resource.__init__(self, xml, res_num)
+    #end
+	
     def _load(self):
         self.content_id = self.xml.getroot().attrib['id']
         self.name = self.xml.find('.//TITLE').attrib['value']
-        self.alltext = self.xml.find('.//TEXT').text
+	self.alltext = self.xml.find('.//TEXT').text
         self.ignore = False
         self.make_label = False
 
         if not self.alltext:
             self.alltext = ''
-
-        while '@X@EmbeddedFile.location@X@' in self.alltext:
+	
+	while '@X@EmbeddedFile.location@X@' in self.alltext:
             self.alltext = self.handle_embedded_file(self.alltext)
 
         content_handler = self.xml.find('.//CONTENTHANDLER').attrib['value']
@@ -391,7 +424,21 @@ class Document(Resource):
     def handle_file(self, file_elem):
         orig_name = file_elem.find('.//NAME').text
 
-        fixed_name = utils.fix_filename(orig_name, self.res_num)
+	#nikoloup
+	#Get actual filename
+	for filename in self.zipfile.namelist():
+		if filename.find(orig_name[1:])!=-1 and filename.find('.xml')==-1:
+			moodle_fname = filename
+			break
+
+	parts = moodle_fname.split('/')
+	moodle_fname = parts[len(parts)-1]
+	parts1 = moodle_fname.split('__')
+        parts2 = moodle_fname.split('.')
+        moodle_fname = parts1[0] + '.' + parts2[len(parts2)-1]
+	
+        fixed_name = utils.fix_filename(moodle_fname, '')
+	#end
 
         fname = urllib2.quote(fixed_name.encode('utf-8'))
 
@@ -403,7 +450,7 @@ class Document(Resource):
         self.alltext = '<br /><br />'.join([self.alltext, f_link])
 
     def handle_embedded_file(self, text):
-        before, rest = text.split('@X@EmbeddedFile.location@X@', 1)
+	before, rest = text.split('@X@EmbeddedFile.location@X@', 1)
 
         filename, after = rest.split('"', 1)
 
@@ -775,14 +822,14 @@ class FillInTheBlankQuestion(Question):
             self.answers.append(answer)
 
 
-def create_moodle_zip(blackboard_zip_fname, out_name):
+def create_moodle_zip(blackboard_zip_fname, out_name, course_id):
     try:
         shutil.rmtree('elixer_tmp')
         shutil.rmtree('course_files')
     except OSError:
         pass
 
-    course = Course(blackboard_zip_fname)
+    course = Course(blackboard_zip_fname, course_id)
 
     moodle_zip = zipfile.ZipFile(out_name, 'w')
 
@@ -792,8 +839,13 @@ def create_moodle_zip(blackboard_zip_fname, out_name):
 
     err_fh = open(os.path.devnull, 'w')
 
-    command = ('unzip %s -d elixer_tmp' % blackboard_zip_fname).split(' ')
-    subprocess.Popen(command, stdout=err_fh, stderr=err_fh).communicate()
+    #nikoloup
+    #fix unzip encoding issues
+    #command = ('unzip %s -d elixer_tmp' % blackboard_zip_fname).split(' ')
+    #subprocess.Popen(command, stdout=err_fh, stderr=err_fh).communicate()
+    bbzip = zipfile.ZipFile(blackboard_zip_fname, 'r')
+    bbzip.extractall('elixer_tmp') 
+    #end
 
     skip_parent = False
 
@@ -804,7 +856,18 @@ def create_moodle_zip(blackboard_zip_fname, out_name):
 
         for bb_fname in files:
             moodle_fname = bb_fname
+	    #nikoloup
+	    #exclude xml files
+	    if moodle_fname.find('.xml')!=-1:
+		continue
 
+	    #nikoloup
+	    #filename cleanup
+	    parts1 = moodle_fname.split('__')
+	    parts2 = moodle_fname.split('.')
+	    moodle_fname = parts1[0] + '.' + parts2[len(parts2)-1]
+	    #end
+	    
             if bb_fname.startswith('!'):
                 if '.' in bb_fname:
                     ext, fname = [s[::-1] for s in bb_fname[1:][::-1].split('.', 1)]
@@ -813,12 +876,16 @@ def create_moodle_zip(blackboard_zip_fname, out_name):
                     ext, fname = '', bb_fname[1:]
                     moodle_fname = (base64.b16decode(fname.upper()))
 
-                moodle_fname = urllib2.unquote(moodle_fname)
+		moodle_fname = urllib2.unquote(moodle_fname)
 
-            res_num = root.split(os.sep, 1)[1].split(os.sep)[0].replace('res', '')
+	    #nikoloup
+	    #filename cleanup
+            #res_num = root.split(os.sep, 1)[1].split(os.sep)[0].replace('res', '')
+	    res_num = ''
+	    #end
 
             fixed_filename = utils.fix_filename(moodle_fname, res_num)
-
+	    
             bb_fname = os.path.join(root, bb_fname)
 
             moodle_fname = os.path.join('course_files', fixed_filename)

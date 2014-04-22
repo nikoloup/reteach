@@ -32,6 +32,16 @@ def parse_options():
         help='tells reteach to expect a folder and convert all zips in it'
     )
 
+    #nikoloup
+    #moodle course id needed for some hard links
+    parser.add_option(
+	'-c', '--courseid',
+	action='store',
+	dest='course_id',
+	help='course auto increment id in moodle, needed for hard-linked files'
+    )
+    #end
+
     (options, args) = parser.parse_args()
 
     if not args:
@@ -94,7 +104,12 @@ def main():
         else:
             out_name = '%s_converted.zip' % input_path[:-4]
 
-        bb9_course.create_moodle_zip(input_path, out_name)
+	if options.course_id:
+	    course_id = options.course_id
+	else:
+	    course_id = 0
+
+        bb9_course.create_moodle_zip(input_path, out_name,course_id)
 
 if __name__ == '__main__':
     main()
