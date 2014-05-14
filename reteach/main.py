@@ -78,6 +78,11 @@ def main():
 
         os.mkdir(out_path)
 
+        if options.course_id:
+                course_id = options.course_id
+        else:
+                course_id = 0
+
         for zip_name in zip_names:
             fixed_out_name = '%s_converted.zip' % zip_name[:-4]
 
@@ -85,10 +90,11 @@ def main():
             full_out_name = os.path.join(out_path, fixed_out_name)
 
             try:
-                bb9_course.create_moodle_zip(full_in_name, full_out_name)
+                bb9_course.create_moodle_zip(full_in_name, full_out_name, course_id)
             except Exception as e:
                 # TODO
                 print 'Error converting %s' % zip_name
+	    course_id = course_id+1
 
     else:
         if not os.path.isfile(input_path):

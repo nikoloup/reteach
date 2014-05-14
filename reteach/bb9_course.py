@@ -142,7 +142,7 @@ class Course(object):
                 moodle_fname = parts[len(parts)-1]
                 parts1 = moodle_fname.split('__')
                 parts2 = moodle_fname.split('.')
-                moodle_fname = '../../file.php/' + self.course_id + '/' + parts1[0] + '.' + parts2[len(parts2)-1]
+                moodle_fname = '../../file.php/' + str(self.course_id) + '/' + parts1[0] + '.' + parts2[len(parts2)-1]
 		xmlstr = xmlstr.replace(match.group(0),moodle_fname)
 
 	xml = etree.fromstring(xmlstr)
