@@ -32,15 +32,26 @@ def parse_options():
         help='tells reteach to expect a folder and convert all zips in it'
     )
 
-    #nikoloup
-    #moodle course id needed for some hard links
     parser.add_option(
 	'-c', '--courseid',
 	action='store',
 	dest='course_id',
 	help='course auto increment id in moodle, needed for hard-linked files'
     )
-    #end
+
+    parser.add_option(
+	'-s', '--staffinfo',
+	action='store_true',
+	dest='transfer_staffinfo',
+	help='tells reteach to also transfer staffinfo as a section'
+    )
+
+    parser.add_option(
+	'-t', '--titles',
+	action='store_true',
+	dest='transfer_titles',
+	help='tells reteach to also transfer blackboard sections titles as moodle section titles'
+    )
 
     (options, args) = parser.parse_args()
 
@@ -58,6 +69,18 @@ def main():
     if not os.path.exists(input_path):
         print 'Error: %s does not exist' % input_path
         sys.exit(1)
+
+    if options.transfer_staffinfo:
+	transfer_staffinfo = 1
+    else:
+	transfer_staffinfo = 0
+
+    if options.transfer_titles:
+	transfer_titles = 1
+    else:
+	transfer_titles = 0
+
+    parameters = {'transfer_staffinfo':transfer_staffinfo, 'transfer_titles':transfer_titles}	
 
     if options.is_folder:
         if not os.path.isdir(input_path):
@@ -90,11 +113,12 @@ def main():
             full_out_name = os.path.join(out_path, fixed_out_name)
 
             try:
-                bb9_course.create_moodle_zip(full_in_name, full_out_name, course_id)
+                bb9_course.create_moodle_zip(full_in_name, full_out_name, course_id, parameters)
             except Exception as e:
                 # TODO
                 print 'Error converting %s' % zip_name
-	    course_id = course_id+1
+		print e
+	    course_id = int(course_id)+1
 
     else:
         if not os.path.isfile(input_path):
@@ -115,7 +139,7 @@ def main():
 	else:
 	    course_id = 0
 
-        bb9_course.create_moodle_zip(input_path, out_name,course_id)
+        bb9_course.create_moodle_zip(input_path, out_name,course_id, parameters)
 
 if __name__ == '__main__':
     main()

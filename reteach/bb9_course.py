@@ -17,9 +17,10 @@ from lxml import etree
 import utils
 
 class Course(object):
-    def __init__(self, archive_filename, course_id):
+    def __init__(self, archive_filename, course_id, parameters):
         self.archive_filename = archive_filename
 	self.course_id = course_id
+	self.parameters = parameters
 
         self.timestamp = str(time.time()).split('.')[0]
 
@@ -87,7 +88,7 @@ class Course(object):
                 self.forums.append(DiscussionBoard(xml, res_num))
             elif res_type == 'resource/x-bb-announcement':
                 self.resources.append(Announcement(xml, res_num))
-            elif res_type == 'resource/x-bb-staffinfo':
+            elif res_type == 'resource/x-bb-staffinfo' and self.parameters['transfer_staffinfo']:
                 self.resources.append(StaffInfo(xml, res_num))
             elif res_type == 'assessment/x-bb-qti-test':
                	quiz_questions = self.convert_questions(xml, res_num)
@@ -113,6 +114,7 @@ class Course(object):
     def convert_course_settings(self, xml):
         self.fullname = xml.find('.//TITLE').attrib['value']
         self.shortname = xml.find('.//COURSEID').attrib['value']
+	self.description = xml.find('.//DESCRIPTION').text;
 
         category_elems = xml.findall('.//CLASSIFICATION')
 
@@ -205,6 +207,8 @@ class Course(object):
         for section in sections:
             section['visible'] = 1
             section['id'] = abs(hash((section['number'], section['summary'])))
+	    if not self.parameters['transfer_titles']:
+		section['summary'] = ''
 
         return sections
 
@@ -241,6 +245,8 @@ class Course(object):
             section['visible'] = 1
             section['id'] = abs(hash((section['number'], section['summary'])))
             section['mods'] = []
+	    if not self.parameters['transfer_titles']:	
+	    	section['summary'] = ''
 
             sections.append(section)
 
@@ -308,6 +314,10 @@ class Announcement(Resource):
     def _load(self):
         self.name = self.xml.find('.//TITLE').attrib['value']
         self.alltext = self.xml.find('.//TEXT').text
+
+	while '@X@EmbeddedFile.location@X@' in self.alltext:
+            self.alltext = self.handle_embedded_file(self.alltext)
+
         self.res_type = 'html'
         self.reference = '2' # TODO
 
@@ -416,20 +426,43 @@ class Document(Resource):
         else:
             self.res_type = 'html'
 
-        for file_elem in self.xml.findall('.//FILE'):
-            self.handle_file(file_elem)
+        #for file_elem in self.xml.findall('.//FILE'):
+        #    self.handle_file(file_elem)
+
+	#nikoloup
+	#Direct links to files instead of attachments
+	counter = 0
+	
+	for file_elem in self.xml.findall('.//FILE'):
+		counter += 1
+	
+	if counter == 1:
+		self.res_type = 'file'
+		for file_elem in self.xml.findall('.//FILE'):
+			self.handle_file_single(file_elem)
+	else:
+		for file_elem in self.xml.findall('.//FILE'):
+			self.handle_file(file_elem);
+	#end
 
         self.type = 'resource'
+	self.popup = 'resizable=,scrollbars=,directories=,location=,menubar=,toolbar=,status=,width=,height='
 
     def handle_file(self, file_elem):
         orig_name = file_elem.find('.//NAME').text
-
+	if orig_name is None:
+		return
 	#nikoloup
 	#Get actual filename
 	for filename in self.zipfile.namelist():
 		if filename.find(orig_name[1:])!=-1 and filename.find('.xml')==-1:
 			moodle_fname = filename
 			break
+
+	try:
+		moodle_fname
+	except NameError:
+		moodle_fname = orig_name
 
 	parts = moodle_fname.split('/')
 	moodle_fname = parts[len(parts)-1]
@@ -441,13 +474,52 @@ class Document(Resource):
 	#end
 
         fname = urllib2.quote(fixed_name.encode('utf-8'))
-
+	
         link_name = file_elem.find('.//LINKNAME').attrib['value']
 
         f_link = '<a href = "$@FILEPHP@$/%s" title = %s>' % ((fname,) * 2)
         f_link = 'Attached File: ' + f_link + '%s</a>' % link_name
 
         self.alltext = '<br /><br />'.join([self.alltext, f_link])
+
+    def handle_file_single(self, file_elem):
+	orig_name = file_elem.find('.//NAME').text
+        if orig_name is None:
+                return
+        #nikoloup
+        #Get actual filename
+        for filename in self.zipfile.namelist():
+                if filename.find(orig_name[1:])!=-1 and filename.find('.xml')==-1:
+                        moodle_fname = filename
+                        break
+
+        try:
+                moodle_fname
+        except NameError:
+                moodle_fname = orig_name
+		
+        parts = moodle_fname.split('/')
+        moodle_fname = parts[len(parts)-1]
+        parts1 = moodle_fname.split('__')
+        parts2 = moodle_fname.split('.')
+        moodle_fname = parts1[0] + '.' + parts2[len(parts2)-1]
+        
+        fixed_name = utils.fix_filename(moodle_fname, '')
+	fname = urllib2.quote(fixed_name.encode('utf-8'))
+	#fixed_name = moodle_fname
+
+	#if utils.only_roman_chars(fixed_name):
+	self.reference = fname
+	#else:
+	#	fname = urllib2.quote(fixed_name.encode('utf-8'))
+	#        link_name = file_elem.find('.//LINKNAME').attrib['value']
+
+	#        f_link = '<a href = "$@FILEPHP@$/%s" title = %s>' % ((fname,) * 2)
+	#        f_link = 'Attached File: ' + f_link + '%s</a>' % link_name
+
+	#        self.alltext = '<br /><br />'.join([self.alltext, f_link])
+		
+	# 	 self.res_type = 'html'
 
     def handle_embedded_file(self, text):
 	before, rest = text.split('@X@EmbeddedFile.location@X@', 1)
@@ -822,14 +894,14 @@ class FillInTheBlankQuestion(Question):
             self.answers.append(answer)
 
 
-def create_moodle_zip(blackboard_zip_fname, out_name, course_id):
+def create_moodle_zip(blackboard_zip_fname, out_name, course_id, parameters):
     try:
         shutil.rmtree('elixer_tmp')
         shutil.rmtree('course_files')
     except OSError:
         pass
 
-    course = Course(blackboard_zip_fname, course_id)
+    course = Course(blackboard_zip_fname, course_id, parameters)
 
     moodle_zip = zipfile.ZipFile(out_name, 'w')
 

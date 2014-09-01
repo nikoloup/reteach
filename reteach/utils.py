@@ -9,6 +9,14 @@ import jinja2
 import random
 import datetime
 
+#nikoloup
+import unicodedata as ud
+#end
+
+#nikoloup
+latin_letters= {}
+#end
+
 def m_hash(*args):
     # TODO: Refactor?
 
@@ -34,6 +42,12 @@ def fix_filename(filename, res_num):
     '''In: internet.mp3, Out: internet_res_num.mp3'''
 
     filename = filename.replace(' ', '_')
+    #nikoloup
+    filename = filename.replace('&', '_')
+    filename = filename.replace('`', '_')
+    filename = filename.replace("'", "")
+    filename = filename.replace(',', '_')
+    #end
 
     if not res_num:
         return filename
@@ -56,3 +70,15 @@ def convert(course):
     moodle_xml_str = xml_template.render(course=course).replace('>None<', '><')
 
     return moodle_xml_str
+
+#nikoloup
+def is_latin(uchr):
+    try: return latin_letters[uchr]
+    except KeyError:
+         return latin_letters.setdefault(uchr, 'LATIN' in ud.name(uchr))
+
+def only_roman_chars(unistr):
+    return all(is_latin(uchr)
+           for uchr in unistr
+           if uchr.isalpha()) # isalpha suggested by John Machin
+#end

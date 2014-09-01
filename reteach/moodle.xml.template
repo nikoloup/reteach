@@ -104,7 +104,7 @@
       <FULLNAME>{{ course.fullname }}</FULLNAME>
       <SHORTNAME>{{ course.shortname }}</SHORTNAME>
       <IDNUMBER/>
-      <SUMMARY/>
+      <SUMMARY>{{ course.description }}</SUMMARY>
       <FORMAT>topics</FORMAT>
       <SHOWGRADES>1</SHOWGRADES>
       <NEWSITEMS>5</NEWSITEMS>
@@ -481,7 +481,7 @@
         <REFERENCE>{{ resource.reference }}</REFERENCE>
         <SUMMARY>{{ resource.summary }}</SUMMARY>
         <ALLTEXT>{{ resource.alltext }}</ALLTEXT>
-        <POPUP></POPUP>
+        <POPUP>{{ resource.popup }}</POPUP>
         <OPTIONS></OPTIONS>
         <TIMEMODIFIED>{{ course.timestamp }}</TIMEMODIFIED>
       </MOD>
