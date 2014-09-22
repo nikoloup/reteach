@@ -263,7 +263,7 @@ class Course(object):
                     try:
                         res_nums_to_assets[res_num].indent = indent
                         res_nums_to_assets[res_num].section_num = section_num
-                    except KeyError:
+		    except KeyError:
                         continue
 
                     section['mods'].append(res_nums_to_assets[res_num])
@@ -284,6 +284,18 @@ class ContentItem(object):
             raise NotImplementedError('Do not instantiate base class')
 
         self.xml = xml
+	#nikoloup
+	#Check if resource is available and set variable
+	self.isavailable = self.xml.find('.//ISAVAILABLE')
+	if self.isavailable is not None:	
+		self.isavailable = self.isavailable.attrib['value']
+		if self.isavailable=='true':
+			self.isvisible = 1
+		else:
+			self.isvisible = 0
+	else:
+		self.isvisible = 1
+	#end
 
         self._load()
 
@@ -315,8 +327,11 @@ class Announcement(Resource):
         self.name = self.xml.find('.//TITLE').attrib['value']
         self.alltext = self.xml.find('.//TEXT').text
 
-	while '@X@EmbeddedFile.location@X@' in self.alltext:
-            self.alltext = self.handle_embedded_file(self.alltext)
+	if self.alltext is not None:
+		while '@X@EmbeddedFile.location@X@' in self.alltext:
+            		self.alltext = self.handle_embedded_file(self.alltext)
+	else:
+		self.alltext = ''
 
         self.res_type = 'html'
         self.reference = '2' # TODO
@@ -393,9 +408,9 @@ class Document(Resource):
     def _load(self):
         self.content_id = self.xml.getroot().attrib['id']
         self.name = self.xml.find('.//TITLE').attrib['value']
-	self.alltext = self.xml.find('.//TEXT').text
-        self.ignore = False
-        self.make_label = False
+	self.alltext = self.xml.find('.//TEXT').text	
+	self.ignore = False
+	self.make_label = False
 
         if not self.alltext:
             self.alltext = ''
@@ -505,11 +520,12 @@ class Document(Resource):
         moodle_fname = parts1[0] + '.' + parts2[len(parts2)-1]
         
         fixed_name = utils.fix_filename(moodle_fname, '')
-	fname = urllib2.quote(fixed_name.encode('utf-8'))
+	fname = fixed_name #.encode('utf-8')
 	#fixed_name = moodle_fname
 
 	#if utils.only_roman_chars(fixed_name):
 	self.reference = fname
+	#print self.reference
 	#else:
 	#	fname = urllib2.quote(fixed_name.encode('utf-8'))
 	#        link_name = file_elem.find('.//LINKNAME').attrib['value']
@@ -838,7 +854,10 @@ class MatchingQuestion(Question):
 
             for answer in self.answers:
                 if answer['ident'] == question_ident:
-                    i = answer['choice_idents'].index(answer_ident)
+		    try:
+                    	i = answer['choice_idents'].index(answer_ident)
+		    except Exception:
+			break
 
                     answer['answer_text'] = answer_texts[i]
 

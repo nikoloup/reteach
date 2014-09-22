@@ -159,7 +159,7 @@
             <ADDED>{{ course.timestamp }}</ADDED>
             <SCORE>0</SCORE>
             <INDENT>{{ mod.indent }}</INDENT>
-            <VISIBLE>1</VISIBLE>
+            <VISIBLE>{{ mod.isvisible|default(1) }}</VISIBLE>
             <GROUPMODE>0</GROUPMODE>
             <GROUPINGID>0</GROUPINGID>
             <GROUPMEMBERSONLY>0</GROUPMEMBERSONLY>
